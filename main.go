@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
 )
 
 type ParseState int
@@ -25,18 +29,41 @@ var cuesAdded = 0
 
 func main() {
 
-	inputFilename := "input.xml"
-	outputFilename := "output.xml"
+	useDefaults := flag.Bool("default", false, "Use default filenames")
 
-	fin, err := os.Open(inputFilename)
+	inplaceRename := flag.Bool("rename", false, "Do in place rename of input file")
+
+	inputFilename := flag.String("in", "rekordbox.xml", "Input filename")
+	outputFilename := flag.String("out", "/tmp/output.xml", "Temporary output filename")
+
+	flag.Parse()
+
+	if *useDefaults {
+		usr, _ := user.Current()
+		dir := usr.HomeDir
+
+		*inputFilename = filepath.Join(dir, "Documents", "rekordbox.xml")
+		*outputFilename = filepath.Join(dir, "Library", "Pioneer", "rekordbox", "rekordbox.xml")
+
+		fmt.Printf("\nUsing Standard Default Values\n")
+	}
+
+	fmt.Printf("Input : %s\n", *inputFilename)
+	fmt.Printf("Output: %s\n", *outputFilename)
+
+	fmt.Printf("\nPress enter to continue or CTRL-C to stop...")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+
+	fin, err := os.Open(*inputFilename)
 	if err != nil {
-		fmt.Printf("Can't open input file '%v': %v\n", inputFilename, err)
+		fmt.Printf("Can't open input file '%v': %v\n", *inputFilename, err)
 		os.Exit(1)
 	}
 
-	fout, err := os.Create(outputFilename)
+	fout, err := os.Create(*outputFilename)
 	if err != nil {
-		fmt.Printf("Can't open output file '%v': %v\n", outputFilename, err)
+		fmt.Printf("Can't open output file '%v': %v\n", *outputFilename, err)
 		os.Exit(2)
 	}
 
@@ -74,9 +101,11 @@ func main() {
 	fin.Close()
 
 	// Now copy the output to the input
-	os.Remove(inputFilename + ".bak")
-	os.Rename(inputFilename, inputFilename+".bak")
-	os.Rename(outputFilename, inputFilename)
+	if *inplaceRename {
+		os.Remove(*inputFilename + ".bak")
+		os.Rename(*inputFilename, *inputFilename+".bak")
+		os.Rename(*outputFilename, *inputFilename)
+	}
 
 	fmt.Printf("Finished  %v tracks changed, %v cues added\n", tracksChanged, cuesAdded)
 }
@@ -220,9 +249,12 @@ func parseAtTrack(tok xml.Token) {
 
 			// Can't write the end until we've finished adding the things above
 			enc.EncodeToken(tok)
+			// enc.EncodeToken(tok.End())
 
 			// Back to collection state
 			state = COLLECTION
+		} else {
+			enc.EncodeToken(tok)
 		}
 
 	default:
